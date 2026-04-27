@@ -269,7 +269,7 @@ categories = [
     ("主菜 (肉蛋)", meal['dish_1']),
     ("副菜 (蔬果)", meal['dish_2']),
     ("额外补充", meal['dish_3'])
- category]
+]
 
 for col, (name, options) in zip(cols, categories):
     with col:
@@ -306,7 +306,7 @@ with col_woman:
         <p><b>执行细节：</b></p>
         <ul>
             <li><b>烹饪建议</b>：按 2 倍分量制作您选中的组合。</li>
-            <li><b>打包策略</b>：煮好后先拨出一一半放入饭盒密封，防止晚餐吃超标。</li>
+            <li><b>打包策略</b>：煮好后先拨出一半放入饭盒密封，防止晚餐吃超标。</li>
             <li><b>额外项</b>：如果是汤类，建议晚餐喝；如果是水果，建议带去公司吃。</li>
         </ul>
     </div>
