@@ -1,39 +1,39 @@
-name: 小红书菜谱自动抓取与更新
+name: 每周菜单自动扩充
 
 on:
   schedule:
-    # 每周一 UTC 时间 0:00 (北京时间早上 8:00) 执行
+    # 设定为每周一 UTC 时间凌晨 0 点运行 (北京时间早上 8 点)
     - cron: '0 0 * * 1'
-  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击运行
+  workflow_dispatch: # 开启手动点击运行按钮，方便随时测试
 
 jobs:
-  update-menu:
+  run-updater:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 赋予写入代码仓库的权限
+      contents: write 
       
     steps:
-      - name: 检出代码库
+      - name: 获取最新代码
         uses: actions/checkout@v3
 
-      - name: 配置 Python 环境
+      - name: 搭建 Python 环境
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 安装依赖包
+      - name: 安装所需依赖库
         run: pip install -r requirements.txt
 
-      - name: 执行自动化脚本
+      - name: 执行自动化数据抓取与分析
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           XHS_API_KEY: ${{ secrets.XHS_API_KEY }}
         run: python update_menu.py
 
-      - name: 提交并推送更新的 JSON 数据
+      - name: 将更新后的食谱保存回代码库
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add menu_data.json
-          git commit -m "Auto-update: 抓取并新增小红书减脂食谱" || echo "No changes to commit"
+          git commit -m "Auto-update: 抓取并新增小红书减脂食谱" || echo "本周没有内容需要更新"
           git push
