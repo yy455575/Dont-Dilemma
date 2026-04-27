@@ -4,40 +4,36 @@ from datetime import date
 import json
 import os
 
-# 设置页面配置
 st.set_page_config(page_title="双人亚洲风味减脂计划 v2", layout="wide", page_icon="🍱")
 
-# --- 基础数据逻辑 ---
 def calculate_bmr(gender, age, weight, height):
-    """Mifflin-St Jeor Equation 计算静默代谢"""
     if gender == "男":
         return 10 * weight + 6.25 * height - 5 * age + 5
     else:
         return 10 * weight + 6.25 * height - 5 * age - 161
 
-# --- 读取动态菜单数据 ---
 @st.cache_data
 def load_menu_data():
     if not os.path.exists("menu_data.json"):
         st.error("⚠️ 找不到 menu_data.json 数据文件。")
         return []
     
-    # 获取文件大小，如果是 0 字节，直接返回空数组，避免 json.load 报错
     if os.path.getsize("menu_data.json") == 0:
-        st.warning("⚠️ menu_data.json 文件是空的，等待脚本写入数据...")
+        st.warning("⚠️ 菜单数据初始化中，等待自动化脚本写入新食谱...")
         return []
         
     try:
         with open("menu_data.json", "r", encoding="utf-8") as file:
             return json.load(file)
     except json.JSONDecodeError:
-        st.error("⚠️ menu_data.json 文件格式错误，请检查是否是合法的 JSON。")
+        st.error("⚠️ 数据文件格式存在异常，请检查 JSON 结构。")
         return []
     except Exception as e:
-        st.error(f"读取数据未知错误: {e}")
+        st.error(f"读取数据出现未知错误: {e}")
         return []
 
-# --- 侧边栏：身体参数计算 ---
+menu_data = load_menu_data()
+
 st.sidebar.header("⚖️ 个人基础数据")
 with st.sidebar:
     st.markdown("### 男士 (27岁)")
@@ -52,28 +48,21 @@ with st.sidebar:
     w_height = st.number_input("女士身高 (cm)", value=160, key="w_h")
     w_bmr = calculate_bmr("女", 29, w_weight, w_height)
     st.success(f"BMR: **{w_bmr:.0f} kcal/日**")
-    
     st.markdown("---")
     st.caption("注：男士中午在公司食堂，此处仅建议晚餐摄入量。")
 
-# --- 主界面 ---
 st.title("🍱 双人减脂计划 (自动扩充版)")
 st.markdown("💡 **男士**：公司午餐 + 家庭晚餐 | **女士**：家庭晚餐 + 次日打包午餐")
 
 if not menu_data:
-    st.stop() # 如果没有数据则停止渲染下方内容
+    st.stop()
 
-# 日历选择
 selected_date = st.date_input("📅 点击日历选择日期", value=date.today())
-
-# 根据现有数据库长度循环取模，确保即使数据不够也不会报错
 total_days = len(menu_data)
 day_index = (selected_date - date(2024, 1, 1)).days % total_days
 meal = menu_data[day_index]
 
 st.markdown(f"### 🗓️ 计划第 **{meal.get('day', day_index + 1)}** 天风格：`{meal.get('tag', '未分类')}`")
-
-# 选项展示
 st.markdown("#### 🍱 今日双选清单 (每类可任选其一组合)")
 
 cols = st.columns(4)
@@ -92,9 +81,7 @@ for col, (name, options) in zip(cols, categories):
 
 st.markdown("---")
 
-# 针对性建议
 col_man, col_woman = st.columns(2)
-
 with col_man:
     m_target = m_bmr * 0.45 
     st.markdown(f"""
@@ -125,7 +112,6 @@ with col_woman:
     </div>
     """, unsafe_allow_html=True)
 
-# 底部全局统计预览
 with st.expander(f"📊 查看当前数据库完整菜单预览 (共 {total_days} 天)"):
     display_list = []
     for m in menu_data:
@@ -137,7 +123,6 @@ with st.expander(f"📊 查看当前数据库完整菜单预览 (共 {total_days
             "副菜 (A/B)": f"{m.get('dish_2', ['-','-'])[0]} / {m.get('dish_2', ['-','-'])[1]}",
             "补充 (A/B)": f"{m.get('dish_3', ['-','-'])[0]} / {m.get('dish_3', ['-','-'])[1]}"
         })
-    df_preview = pd.DataFrame(display_list)
-    st.dataframe(df_preview, use_container_width=True)
+    st.dataframe(pd.DataFrame(display_list), use_container_width=True)
 
 st.caption("🚫 忌口：苦瓜。💡 烹饪提醒：即使是方案B，也请坚持少油少盐原则。")
