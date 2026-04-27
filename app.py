@@ -37,8 +37,6 @@ def load_menu_data():
         st.error(f"读取数据未知错误: {e}")
         return []
 
-menu_data = load_menu_data()
-
 # --- 侧边栏：身体参数计算 ---
 st.sidebar.header("⚖️ 个人基础数据")
 with st.sidebar:
