@@ -19,13 +19,22 @@ def calculate_bmr(gender, age, weight, height):
 @st.cache_data
 def load_menu_data():
     if not os.path.exists("menu_data.json"):
-        st.error("⚠️ 找不到 menu_data.json 数据文件，请确保爬虫脚本已运行。")
+        st.error("⚠️ 找不到 menu_data.json 数据文件。")
         return []
+    
+    # 获取文件大小，如果是 0 字节，直接返回空数组，避免 json.load 报错
+    if os.path.getsize("menu_data.json") == 0:
+        st.warning("⚠️ menu_data.json 文件是空的，等待脚本写入数据...")
+        return []
+        
     try:
         with open("menu_data.json", "r", encoding="utf-8") as file:
             return json.load(file)
+    except json.JSONDecodeError:
+        st.error("⚠️ menu_data.json 文件格式错误，请检查是否是合法的 JSON。")
+        return []
     except Exception as e:
-        st.error(f"读取数据失败: {e}")
+        st.error(f"读取数据未知错误: {e}")
         return []
 
 menu_data = load_menu_data()
