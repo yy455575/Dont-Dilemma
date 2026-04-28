@@ -32,6 +32,7 @@ jobs:
 
       - name: 安装后端专属依赖库
         run: |
+          npm install crypto-js  # 🌟 核心修复：强制在根目录安装这个缺失的加密包！
           cd Spider_XHS && npm install
           cd ..
           pip install google-generativeai requests
