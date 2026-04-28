@@ -50,7 +50,7 @@ def fetch_xhs_notes_with_spider(blogger_id):
 
     try:
         # 🌟 剔除了获取用户信息的错误方法，专注抓取笔记
-        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'get_note_by_user']
+        target_methods = ['get_user_note_info', 'get_user_all_notes', 'get_user_notes', 'get_user_posted_notes', 'get_note_by_user']
         method_to_call = None
         for m in target_methods:
             if hasattr(pc_api, m):
