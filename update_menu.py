@@ -6,7 +6,6 @@ import requests
 import inspect
 import google.generativeai as genai
 
-# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -23,7 +22,6 @@ TARGET_BLOGGERS = [
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
-    """4字查重算法"""
     clean_new = new_name.replace("减脂", "").replace("版", "")
     for old_name in existing_names:
         clean_old = old_name.replace("减脂", "").replace("版", "")
@@ -37,7 +35,6 @@ def is_duplicate_name(new_name, existing_names):
     return False
 
 def fetch_xhs_notes_with_spider(blogger_id):
-    """使用最新版 cv-cat/Spider_XHS 引擎获取数据 (带雷达探测与翻页)"""
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
         return []
@@ -52,7 +49,8 @@ def fetch_xhs_notes_with_spider(blogger_id):
         return []
 
     try:
-        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user', 'get_user_info']
+        # 🌟 剔除了获取用户信息的错误方法，专注抓取笔记
+        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'get_note_by_user']
         method_to_call = None
         for m in target_methods:
             if hasattr(pc_api, m):
@@ -60,7 +58,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 print(f"✅ 成功匹配到底层抓取方法: {m}")
                 break
                 
-        # 🌟 核心侦测雷达
         if not method_to_call:
             available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
             print(f"⚠️ 找不到目标抓取方法！当前 XHS_Apis 支持的方法有：\n{available_methods}")
