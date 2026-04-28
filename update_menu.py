@@ -3,16 +3,11 @@ import os
 import sys
 import time
 import requests
+import inspect
 import google.generativeai as genai
 
-# --- 将拉取下来的 Spider_XHS 加入系统路径，以便直接调用其方法 ---
+# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
-try:
-    # 尝试导入 Spider_XHS 的请求工具 (根据其实际项目结构进行桥接)
-    # 注意：若后续项目结构变更，此处导入路径需同步调整
-    from xhs_utils.xhs_req import XhsReq
-except ImportError:
-    print("⚠️ 无法导入 Spider_XHS 核心模块，请检查代码拉取状态。")
 
 # --- 环境配置 ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -21,7 +16,7 @@ XHS_COOKIE = os.environ.get("XHS_COOKIE")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-pro') 
 
-TARGET_BLOGGERS = ["69a5292900000000210079b7", "5bf511b0576d7b0001dd4373","63ea20f9000000002702b04f"] 
+TARGET_BLOGGERS = ["69a5292900000000210079b7"] 
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
@@ -40,7 +35,7 @@ def is_duplicate_name(new_name, existing_names):
 
 def fetch_xhs_notes_with_spider(blogger_id):
     """
-    使用 cv-cat/Spider_XHS 引擎获取数据
+    使用最新版 cv-cat/Spider_XHS 引擎获取数据
     """
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
@@ -48,32 +43,57 @@ def fetch_xhs_notes_with_spider(blogger_id):
         
     print(f"🕸️ 启动 Spider_XHS 引擎，正在分析博主 {blogger_id} 的主页...")
     
-    # 初始化爬虫请求类 (此处为拟合 Spider_XHS 的通用调用逻辑)
-    # 具体参数 x-s 会由其内部的 node 脚本自动计算
-    req = XhsReq(cookie=XHS_COOKIE)
-    
-    api_url = f"https://edith.xiaohongshu.com/api/sns/web/v1/user_posted"
-    params = {
-        "num": 10,
-        "cursor": "",
-        "user_id": blogger_id,
-        "image_formats": "jpg,webp,avif"
-    }
-    
     try:
-        # Spider_XHS 封装的请求方法会自动处理签名
-        res = req.get(api_url, params=params)
-        data = res.json()
+        # 适配最新版 Spider_XHS：核心类已迁移至 apis.xhs_pc_apis
+        from apis.xhs_pc_apis import XHS_Apis
+        pc_api = XHS_Apis()
+    except ImportError as e:
+        print(f"❌ 无法从 Spider_XHS 导入 XHS_Apis: {e}")
+        return []
+
+    try:
+        success, msg, data = False, "", None
         
-        if data.get("success"):
-            notes = data["data"]["notes"]
-            # 必须增加强制休眠，防止 GitHub Actions IP 被小红书拉黑
-            print("⏳ 为防止触发风控，休眠 5 秒...")
+        # 应对开源项目频繁改名，采用智能查找模式匹配“获取用户笔记”的方法
+        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user']
+        method_to_call = None
+        
+        for m in target_methods:
+            if hasattr(pc_api, m):
+                method_to_call = getattr(pc_api, m)
+                print(f"✅ 成功匹配到底层抓取方法: {m}")
+                break
+                
+        if not method_to_call:
+            # 如果又改名了，暴力打印出当前库支持的所有方法，方便我们在日志中直接看到正确名字
+            available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
+            print(f"⚠️ 开源库底层方法发生变更！当前 XHS_Apis 支持的方法有: {available_methods}")
+            return []
+
+        # 动态适配参数结构并调用
+        sig = inspect.signature(method_to_call)
+        try:
+            if 'cursor' in sig.parameters:
+                success, msg, data = method_to_call(user_id=blogger_id, cursor="", cookies_str=XHS_COOKIE)
+            elif 'user_id' in sig.parameters:
+                success, msg, data = method_to_call(user_id=blogger_id, cookies_str=XHS_COOKIE)
+            else:
+                # 模糊传参回退
+                success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
+        except Exception as e:
+            print(f"⚠️ 参数匹配异常，尝试强制传参: {e}")
+            success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
+
+        if success:
+            # 兼容不同的数据返回结构
+            notes = data.get("notes", []) if isinstance(data, dict) else data
+            print(f"🎉 成功获取到 {len(notes)} 篇近期笔记！为防风控休眠 5 秒...")
             time.sleep(5) 
             return notes
         else:
-            print(f"❌ 抓取失败，可能是 Cookie 失效或 IP 被封: {data}")
+            print(f"❌ 接口请求失败 (大概率是 Cookie 失效或 IP 风控): {msg}")
             return []
+            
     except Exception as e:
         print(f"Spider_XHS 引擎运行异常: {e}")
         return []
@@ -94,7 +114,6 @@ def extract_recipe_with_gemini(note_data):
     {text}
     """
     
-    # 小红书原生的数据结构中提取标题和描述
     title = note_data.get("display_title", "")
     desc = note_data.get("desc", "")
     text_content = f"【标题】: {title}\n【正文】: {desc}"
@@ -139,7 +158,7 @@ def main():
                     new_recipes_added += 1
                     print(f"✅ 成功录入新菜谱：{recipe_json.get('tag')}")
                 else:
-                    print(f"❌ 触发去重机制，跳过内容: {note.get('display_title')}")
+                    print(f"❌ 触发去重机制，跳过内容: {note.get('display_title', '未命名')}")
 
     if new_recipes_added > 0:
         with open(MENU_FILE, "w", encoding="utf-8") as f:
