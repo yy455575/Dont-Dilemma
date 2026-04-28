@@ -9,14 +9,18 @@ import google.generativeai as genai
 # --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
-# --- 环境配置 ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 XHS_COOKIE = os.environ.get("XHS_COOKIE") 
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-pro') 
 
-TARGET_BLOGGERS = ["69a5292900000000210079b7","5bf511b0576d7b0001dd4373","66fa9e53000000001d02293c"] 
+# 你关注的目标博主列表（已更新为 3 位）
+TARGET_BLOGGERS = [
+    "69a5292900000000210079b7",
+    "5bf511b0576d7b0001dd4373", 
+    "66fa9e53000000001d02293c"
+] 
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
@@ -35,7 +39,7 @@ def is_duplicate_name(new_name, existing_names):
 
 def fetch_xhs_notes_with_spider(blogger_id):
     """
-    使用最新版 cv-cat/Spider_XHS 引擎获取数据 (支持自动翻页深度抓取)
+    使用最新版 cv-cat/Spider_XHS 引擎获取数据 (带雷达探测与翻页)
     """
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
@@ -51,8 +55,8 @@ def fetch_xhs_notes_with_spider(blogger_id):
         return []
 
     try:
-        # 智能查找目标方法
-        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user']
+        # 常见的方法名候选库
+        target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user', 'get_user_info']
         method_to_call = None
         for m in target_methods:
             if hasattr(pc_api, m):
@@ -60,21 +64,19 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 print(f"✅ 成功匹配到底层抓取方法: {m}")
                 break
                 
+        # 🌟 核心侦测雷达：如果没找到，暴力打印出所有当前可用方法！
         if not method_to_call:
-            print(f"⚠️ 开源库底层方法发生变更！")
+            available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
+            print(f"⚠️ 找不到目标抓取方法！当前 XHS_Apis 支持的方法有：\n{available_methods}")
             return []
 
         sig = inspect.signature(method_to_call)
-        
-        # --- 核心修改区：加入翻页逻辑 ---
         all_notes = []
-        current_cursor = ""  # 翻页的“书签”
-        max_pages = 3        # 强制往下翻 3 页（大约 30-60 篇笔记，足够覆盖几周前的内容）
+        current_cursor = ""  
+        max_pages = 3        
 
         for page in range(max_pages):
             print(f"📄 正在抓取第 {page + 1} 页数据...")
-            
-            # 动态传参
             try:
                 if 'cursor' in sig.parameters:
                     success, msg, data = method_to_call(user_id=blogger_id, cursor=current_cursor, cookies_str=XHS_COOKIE)
@@ -87,23 +89,19 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 break
 
             if success:
-                # 提取当前页笔记并加入总列表
                 current_page_notes = data.get("notes", []) if isinstance(data, dict) else data
                 all_notes.extend(current_page_notes)
                 print(f"   -> 本页获取到 {len(current_page_notes)} 篇笔记。")
 
-                # 判断是否有下一页
                 if isinstance(data, dict):
                     has_more = data.get("has_more", False)
                     current_cursor = data.get("cursor", "")
-                    
                     if not has_more or not current_cursor:
                         print("   -> 博主内容已到底，停止翻页。")
                         break
                 else:
-                    break # 如果返回格式不对，安全退出翻页
+                    break 
 
-                # ⚠️ 绝对不能删的防风控休眠：每翻一页必须停顿 5 秒，模拟真人慢速滑动
                 time.sleep(5) 
             else:
                 print(f"❌ 接口请求失败 (大概率是 Cookie 失效或 IP 风控): {msg}")
@@ -117,7 +115,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
         return []
 
 def extract_recipe_with_gemini(note_data):
-    """大模型图文转化引擎"""
     prompt = """
     你是一个专业的营养师。请分析这篇小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出，不要输出任何多余的解释文字。
     
