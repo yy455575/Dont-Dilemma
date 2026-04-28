@@ -57,7 +57,7 @@ def fetch_xhs_notes_with_spider(blogger_id):
         from apis.xhs_pc_apis import XHS_Apis
         pc_api = XHS_Apis()
 
-        target_methods = ['get_user_note_info', 'get_user_all_notes', 'get_user_notes', 'get_user_posted_notes']
+        target_methods = ['get_user_all_notes', 'get_user_notes', 'get_user_posted_notes']
         method_to_call = None
         for m in target_methods:
             if hasattr(pc_api, m):
