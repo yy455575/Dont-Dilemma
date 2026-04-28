@@ -6,6 +6,7 @@ import requests
 import inspect
 import google.generativeai as genai
 
+# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -22,6 +23,7 @@ TARGET_BLOGGERS = [
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
+    """4字查重算法"""
     clean_new = new_name.replace("减脂", "").replace("版", "")
     for old_name in existing_names:
         clean_old = old_name.replace("减脂", "").replace("版", "")
@@ -35,22 +37,27 @@ def is_duplicate_name(new_name, existing_names):
     return False
 
 def fetch_xhs_notes_with_spider(blogger_id):
+    """
+    使用最新版 cv-cat/Spider_XHS 引擎获取数据
+    """
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
         return []
         
     print(f"🕸️ 启动 Spider_XHS 引擎，正在分析博主 {blogger_id} 的主页...")
     
+    # 🌟 核心修复区：记录当前根目录，并将工作环境强制切换进 Spider_XHS 内部
+    # 这样 Node.js 就能完美找到它的内部 js 文件了
+    original_cwd = os.getcwd()
+    spider_path = os.path.join(original_cwd, "Spider_XHS")
+    
     try:
+        os.chdir(spider_path)
+        
         from apis.xhs_pc_apis import XHS_Apis
         pc_api = XHS_Apis()
-    except ImportError as e:
-        print(f"❌ 无法从 Spider_XHS 导入 XHS_Apis: {e}")
-        return []
 
-    try:
-        # 🌟 剔除了获取用户信息的错误方法，专注抓取笔记
-        target_methods = ['get_user_note_info', 'get_user_all_notes', 'get_user_notes', 'get_user_posted_notes', 'get_note_by_user']
+        target_methods = ['get_user_note_info', 'get_user_all_notes', 'get_user_notes', 'get_user_posted_notes']
         method_to_call = None
         for m in target_methods:
             if hasattr(pc_api, m):
@@ -106,6 +113,9 @@ def fetch_xhs_notes_with_spider(blogger_id):
     except Exception as e:
         print(f"Spider_XHS 引擎运行异常: {e}")
         return []
+    finally:
+        # 🌟 必须执行的安全退回：抓完数据后，退回到项目的根目录，确保写入 menu_data.json 路径正确
+        os.chdir(original_cwd)
 
 def extract_recipe_with_gemini(note_data):
     prompt = """
