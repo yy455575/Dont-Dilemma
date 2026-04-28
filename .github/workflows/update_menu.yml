@@ -1,10 +1,9 @@
-name: 每周菜单自动扩充
+name: 小红书菜单自动扩充 (Spider_XHS 引擎)
 
 on:
   schedule:
-    # 设定为每周一 UTC 时间凌晨 0 点运行 (北京时间早上 8 点)
     - cron: '0 0 * * 1'
-  workflow_dispatch: # 开启手动点击运行按钮，方便随时测试
+  workflow_dispatch: 
 
 jobs:
   run-updater:
@@ -13,27 +12,39 @@ jobs:
       contents: write 
       
     steps:
-      - name: 获取最新代码
+      - name: 获取本地代码库
         uses: actions/checkout@v3
 
-      - name: 搭建 Python 环境
+      - name: 检出 Spider_XHS 核心爬虫引擎
+        run: git clone https://github.com/cv-cat/Spider_XHS.git
+
+      - name: 配置 Node.js (用于破解 x-s 签名算法)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: 配置 Python 环境
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 安装所需依赖库
-        run: pip install -r requirements.txt
+      - name: 安装依赖
+        run: |
+          cd Spider_XHS && npm install
+          cd ..
+          pip install -r requirements.txt
+          pip install -r Spider_XHS/requirements.txt
 
-      - name: 执行自动化数据抓取与分析
+      - name: 执行数据抓取与大模型分析
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XHS_API_KEY: ${{ secrets.XHS_API_KEY }}
+          XHS_COOKIE: ${{ secrets.XHS_COOKIE }} # 新增：你的小红书登录凭证
         run: python update_menu.py
 
-      - name: 将更新后的食谱保存回代码库
+      - name: 提交并推送最新数据
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add menu_data.json
-          git commit -m "Auto-update: 抓取并新增小红书减脂食谱" || echo "本周没有内容需要更新"
+          git commit -m "Auto-update: 使用 Spider_XHS 获取最新食谱" || echo "无新数据更新"
           git push
