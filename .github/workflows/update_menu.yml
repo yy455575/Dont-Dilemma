@@ -13,18 +13,18 @@ jobs:
       
     steps:
       - name: 获取本地代码库
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 升级到 v4
 
       - name: 检出 Spider_XHS 核心爬虫引擎
         run: git clone https://github.com/cv-cat/Spider_XHS.git
 
-      - name: 配置 Node.js (用于破解 x-s 签名算法)
-        uses: actions/setup-node@v3
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4  # 升级到 v4
         with:
-          node-version: '20'
+          node-version: '20' 
 
       - name: 配置 Python 环境
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5  # 升级到 v5
         with:
           python-version: '3.10'
 
@@ -38,7 +38,7 @@ jobs:
       - name: 执行数据抓取与大模型分析
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XHS_COOKIE: ${{ secrets.XHS_COOKIE }} # 新增：你的小红书登录凭证
+          XHS_COOKIE: ${{ secrets.XHS_COOKIE }}
         run: python update_menu.py
 
       - name: 提交并推送最新数据
