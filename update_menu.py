@@ -15,7 +15,6 @@ XHS_COOKIE = os.environ.get("XHS_COOKIE")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-pro') 
 
-# 你关注的目标博主列表（已更新为 3 位）
 TARGET_BLOGGERS = [
     "69a5292900000000210079b7",
     "5bf511b0576d7b0001dd4373", 
@@ -38,9 +37,7 @@ def is_duplicate_name(new_name, existing_names):
     return False
 
 def fetch_xhs_notes_with_spider(blogger_id):
-    """
-    使用最新版 cv-cat/Spider_XHS 引擎获取数据 (带雷达探测与翻页)
-    """
+    """使用最新版 cv-cat/Spider_XHS 引擎获取数据 (带雷达探测与翻页)"""
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
         return []
@@ -55,7 +52,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
         return []
 
     try:
-        # 常见的方法名候选库
         target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user', 'get_user_info']
         method_to_call = None
         for m in target_methods:
@@ -64,7 +60,7 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 print(f"✅ 成功匹配到底层抓取方法: {m}")
                 break
                 
-        # 🌟 核心侦测雷达：如果没找到，暴力打印出所有当前可用方法！
+        # 🌟 核心侦测雷达
         if not method_to_call:
             available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
             print(f"⚠️ 找不到目标抓取方法！当前 XHS_Apis 支持的方法有：\n{available_methods}")
