@@ -21,7 +21,7 @@ XHS_COOKIE = os.environ.get("XHS_COOKIE")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-pro') 
 
-TARGET_BLOGGERS = ["69a5292900000000210079b7"] 
+TARGET_BLOGGERS = ["69a5292900000000210079b7", "5bf511b0576d7b0001dd4373","63ea20f9000000002702b04f"] 
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
