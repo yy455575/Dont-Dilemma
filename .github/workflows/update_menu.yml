@@ -35,11 +35,13 @@ jobs:
           pip install -r requirements.txt
           pip install -r Spider_XHS/requirements.txt
 
-      - name: 执行数据抓取与大模型分析
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XHS_COOKIE: ${{ secrets.XHS_COOKIE }}
-        run: python update_menu.py
+- name: 安装依赖
+        run: |
+          cd Spider_XHS && npm install
+          cd ..
+          # 明确指定安装大模型和请求库，不再依赖根目录的 requirements.txt
+          pip install google-generativeai requests
+          pip install -r Spider_XHS/requirements.txt
 
       - name: 提交并推送最新数据
         run: |
