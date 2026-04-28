@@ -35,7 +35,7 @@ def is_duplicate_name(new_name, existing_names):
 
 def fetch_xhs_notes_with_spider(blogger_id):
     """
-    使用最新版 cv-cat/Spider_XHS 引擎获取数据
+    使用最新版 cv-cat/Spider_XHS 引擎获取数据 (支持自动翻页深度抓取)
     """
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
@@ -44,7 +44,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
     print(f"🕸️ 启动 Spider_XHS 引擎，正在分析博主 {blogger_id} 的主页...")
     
     try:
-        # 适配最新版 Spider_XHS：核心类已迁移至 apis.xhs_pc_apis
         from apis.xhs_pc_apis import XHS_Apis
         pc_api = XHS_Apis()
     except ImportError as e:
@@ -52,12 +51,9 @@ def fetch_xhs_notes_with_spider(blogger_id):
         return []
 
     try:
-        success, msg, data = False, "", None
-        
-        # 应对开源项目频繁改名，采用智能查找模式匹配“获取用户笔记”的方法
+        # 智能查找目标方法
         target_methods = ['get_user_notes', 'get_user_posted_notes', 'get_user_posted', 'user_notes', 'get_note_by_user']
         method_to_call = None
-        
         for m in target_methods:
             if hasattr(pc_api, m):
                 method_to_call = getattr(pc_api, m)
@@ -65,34 +61,56 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 break
                 
         if not method_to_call:
-            # 如果又改名了，暴力打印出当前库支持的所有方法，方便我们在日志中直接看到正确名字
-            available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
-            print(f"⚠️ 开源库底层方法发生变更！当前 XHS_Apis 支持的方法有: {available_methods}")
+            print(f"⚠️ 开源库底层方法发生变更！")
             return []
 
-        # 动态适配参数结构并调用
         sig = inspect.signature(method_to_call)
-        try:
-            if 'cursor' in sig.parameters:
-                success, msg, data = method_to_call(user_id=blogger_id, cursor="", cookies_str=XHS_COOKIE)
-            elif 'user_id' in sig.parameters:
-                success, msg, data = method_to_call(user_id=blogger_id, cookies_str=XHS_COOKIE)
-            else:
-                # 模糊传参回退
-                success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
-        except Exception as e:
-            print(f"⚠️ 参数匹配异常，尝试强制传参: {e}")
-            success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
+        
+        # --- 核心修改区：加入翻页逻辑 ---
+        all_notes = []
+        current_cursor = ""  # 翻页的“书签”
+        max_pages = 3        # 强制往下翻 3 页（大约 30-60 篇笔记，足够覆盖几周前的内容）
 
-        if success:
-            # 兼容不同的数据返回结构
-            notes = data.get("notes", []) if isinstance(data, dict) else data
-            print(f"🎉 成功获取到 {len(notes)} 篇近期笔记！为防风控休眠 5 秒...")
-            time.sleep(5) 
-            return notes
-        else:
-            print(f"❌ 接口请求失败 (大概率是 Cookie 失效或 IP 风控): {msg}")
-            return []
+        for page in range(max_pages):
+            print(f"📄 正在抓取第 {page + 1} 页数据...")
+            
+            # 动态传参
+            try:
+                if 'cursor' in sig.parameters:
+                    success, msg, data = method_to_call(user_id=blogger_id, cursor=current_cursor, cookies_str=XHS_COOKIE)
+                elif 'user_id' in sig.parameters:
+                    success, msg, data = method_to_call(user_id=blogger_id, cookies_str=XHS_COOKIE)
+                else:
+                    success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
+            except Exception as e:
+                print(f"⚠️ 翻页传参异常: {e}")
+                break
+
+            if success:
+                # 提取当前页笔记并加入总列表
+                current_page_notes = data.get("notes", []) if isinstance(data, dict) else data
+                all_notes.extend(current_page_notes)
+                print(f"   -> 本页获取到 {len(current_page_notes)} 篇笔记。")
+
+                # 判断是否有下一页
+                if isinstance(data, dict):
+                    has_more = data.get("has_more", False)
+                    current_cursor = data.get("cursor", "")
+                    
+                    if not has_more or not current_cursor:
+                        print("   -> 博主内容已到底，停止翻页。")
+                        break
+                else:
+                    break # 如果返回格式不对，安全退出翻页
+
+                # ⚠️ 绝对不能删的防风控休眠：每翻一页必须停顿 5 秒，模拟真人慢速滑动
+                time.sleep(5) 
+            else:
+                print(f"❌ 接口请求失败 (大概率是 Cookie 失效或 IP 风控): {msg}")
+                break
+        
+        print(f"🎉 翻页结束！共计提取该博主 {len(all_notes)} 篇近期笔记准备送交 AI 分析...")
+        return all_notes
             
     except Exception as e:
         print(f"Spider_XHS 引擎运行异常: {e}")
