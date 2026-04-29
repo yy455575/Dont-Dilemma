@@ -35,13 +35,13 @@ jobs:
           npm install crypto-js
           cd Spider_XHS && npm install
           cd ..
-          # 🌟 核心修改：安装 zhipuai 替换原有的 google-genai
-          pip install zhipuai requests
+          # 🌟 核心修复：强制补齐智谱底层的依赖环境
+          pip install zhipuai requests sniffio httpx pydantic
           pip install -r Spider_XHS/requirements.txt
 
       - name: 执行数据抓取与大模型分析
         env:
-          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}  # 🌟 注入智谱的秘钥
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}  
           XHS_COOKIE: ${{ secrets.XHS_COOKIE }}
         run: python update_menu.py
 
