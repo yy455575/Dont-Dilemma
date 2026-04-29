@@ -13,7 +13,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 XHS_COOKIE = os.environ.get("XHS_COOKIE") 
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-pro') 
+model = genai.GenerativeModel('gemini-1.5-flash') 
 
 TARGET_BLOGGERS = [
     "69a5292900000000210079b7",
