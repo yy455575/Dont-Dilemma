@@ -4,7 +4,7 @@ import sys
 import time
 import requests
 import inspect
-from zhipuai import ZhipuAI  # 🌟 引入智谱 SDK
+from zhipuai import ZhipuAI
 
 # --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
@@ -12,7 +12,6 @@ sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY")
 XHS_COOKIE = os.environ.get("XHS_COOKIE") 
 
-# 🌟 初始化智谱客户端
 if not ZHIPU_API_KEY:
     print("⚠️ 警告: 未检测到 ZHIPU_API_KEY 环境变量！")
 client = ZhipuAI(api_key=ZHIPU_API_KEY)
@@ -121,12 +120,14 @@ def extract_recipe_with_glm(note_data):
     1. 份量与搭配需能同时满足：一份男士晚餐 + 一份女士晚餐及次日午餐。
     2. 绝对不能包含“苦瓜”！如果原笔记中有苦瓜，请替换为其他蔬菜或直接剔除。
     
-    需要的 JSON 字段：
-    - tag: 菜系或风格（如"中式家常"）
-    - carbs: 包含2个字符串的数组，提取优质碳水
-    - dish_1: 包含2个字符串的数组，提取主菜/高蛋白肉类
-    - dish_2: 包含2个字符串的数组，提取副菜/蔬菜类
-    - dish_3: 包含2个字符串的数组，提取额外补充/水果饮品
+    需要的单体 JSON 对象格式如下（请不要在外面套数组中括号）：
+    {
+      "tag": "菜系或风格（如中式家常）",
+      "carbs": ["优质碳水1", "优质碳水2"],
+      "dish_1": ["主菜1", "高蛋白肉类2"],
+      "dish_2": ["副菜1", "蔬菜类2"],
+      "dish_3": ["额外补充1", "水果饮品2"]
+    }
     """
     
     title = note_data.get("display_title", "")
@@ -137,21 +138,30 @@ def extract_recipe_with_glm(note_data):
         return None
         
     try:
-        # 🌟 调用智谱 GLM 接口
         response = client.chat.completions.create(
-            model="glm-4-flash",  # 推荐使用 flash 模型处理结构化提取，速度快
+            model="glm-4-flash",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text_content}
             ],
-            temperature=0.1 # 调低温度值，保证 JSON 格式更稳定
+            temperature=0.1 
         )
         
         result_str = response.choices[0].message.content.strip()
-        # 清理可能带有的 markdown 标记
         result_str = result_str.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        return json.loads(result_str)
         
+        parsed_data = json.loads(result_str)
+        
+        # 🌟 终极防弹衣：如果 GLM 还是套了中括号，我们自动帮它脱掉
+        if isinstance(parsed_data, list) and len(parsed_data) > 0:
+            parsed_data = parsed_data[0]
+            
+        if isinstance(parsed_data, dict):
+            return parsed_data
+        else:
+            print("⚠️ GLM 返回了无法解析的结构")
+            return None
+            
     except Exception as e:
         print(f"GLM 提取失败/格式错误: {e}")
         return None
@@ -174,7 +184,8 @@ def main():
         for note in recent_notes:
             recipe_json = extract_recipe_with_glm(note)
             
-            if recipe_json:
+            # 🌟 增加最后一道保险：确保 recipe_json 绝对是个字典
+            if recipe_json and isinstance(recipe_json, dict):
                 all_new_dishes = recipe_json.get("dish_1", []) + recipe_json.get("dish_2", [])
                 is_duplicate = any(is_duplicate_name(dish, existing_dishes) for dish in all_new_dishes)
                 
@@ -186,6 +197,8 @@ def main():
                     print(f"✅ 成功录入新菜谱：{recipe_json.get('tag')}")
                 else:
                     print(f"❌ 触发去重机制，跳过内容: {note.get('display_title', '未命名')}")
+            else:
+                print(f"⚠️ 解析跳过: 该篇笔记未能成功提取出合规 JSON")
 
     if new_recipes_added > 0:
         with open(MENU_FILE, "w", encoding="utf-8") as f:
