@@ -35,7 +35,8 @@ jobs:
           npm install crypto-js  # 🌟 核心修复：强制在根目录安装这个缺失的加密包！
           cd Spider_XHS && npm install
           cd ..
-          pip install google-generativeai requests
+          # 🌟 核心修改：将 google-generativeai 替换为全新的 google-genai
+          pip install google-genai requests
           pip install -r Spider_XHS/requirements.txt
 
       - name: 执行数据抓取与大模型分析
