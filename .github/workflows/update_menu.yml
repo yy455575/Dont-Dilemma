@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write 
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 🌟 新增：响应官方号召，强制底层动作使用 Node 24 消除预警
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 获取本地代码库
@@ -23,25 +23,25 @@ jobs:
       - name: 配置 Node.js 环境
         uses: actions/setup-node@v4
         with:
-          node-version: '24'  # 🌟 更新：将运行环境也主动拉高到 24 版本
+          node-version: '24' 
 
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 安装后端专属依赖库
+      - name: 安装后端专属依赖库 (切换至智谱SDK)
         run: |
-          npm install crypto-js  # 🌟 核心修复：强制在根目录安装这个缺失的加密包！
+          npm install crypto-js
           cd Spider_XHS && npm install
           cd ..
-          # 🌟 核心修改：将 google-generativeai 替换为全新的 google-genai
-          pip install google-genai requests
+          # 🌟 核心修改：安装 zhipuai 替换原有的 google-genai
+          pip install zhipuai requests
           pip install -r Spider_XHS/requirements.txt
 
       - name: 执行数据抓取与大模型分析
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}  # 🌟 注入智谱的秘钥
           XHS_COOKIE: ${{ secrets.XHS_COOKIE }}
         run: python update_menu.py
 
