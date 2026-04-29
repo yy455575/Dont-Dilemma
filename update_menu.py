@@ -4,15 +4,18 @@ import sys
 import time
 import requests
 import inspect
-from google import genai  # 🌟 换成全新一代的 SDK
+from zhipuai import ZhipuAI  # 🌟 引入智谱 SDK
 
+# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY")
 XHS_COOKIE = os.environ.get("XHS_COOKIE") 
 
-# 🌟 初始化全新客户端
-client = genai.Client(api_key=GEMINI_API_KEY)
+# 🌟 初始化智谱客户端
+if not ZHIPU_API_KEY:
+    print("⚠️ 警告: 未检测到 ZHIPU_API_KEY 环境变量！")
+client = ZhipuAI(api_key=ZHIPU_API_KEY)
 
 TARGET_BLOGGERS = [
     "69a5292900000000210079b7",
@@ -22,6 +25,7 @@ TARGET_BLOGGERS = [
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
+    """4字查重算法"""
     clean_new = new_name.replace("减脂", "").replace("版", "")
     for old_name in existing_names:
         clean_old = old_name.replace("减脂", "").replace("版", "")
@@ -108,9 +112,10 @@ def fetch_xhs_notes_with_spider(blogger_id):
     finally:
         os.chdir(original_cwd)
 
-def extract_recipe_with_gemini(note_data):
-    prompt = """
-    你是一个专业的营养师。请分析这篇小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出，不要输出任何多余的解释文字。
+def extract_recipe_with_glm(note_data):
+    """使用智谱 GLM 模型提取图文数据"""
+    system_prompt = """
+    你是一个专业的营养师。请分析小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出，不要输出任何多余的解释文字。
 
     【核心备餐要求】
     1. 份量与搭配需能同时满足：一份男士晚餐 + 一份女士晚餐及次日午餐。
@@ -122,9 +127,6 @@ def extract_recipe_with_gemini(note_data):
     - dish_1: 包含2个字符串的数组，提取主菜/高蛋白肉类
     - dish_2: 包含2个字符串的数组，提取副菜/蔬菜类
     - dish_3: 包含2个字符串的数组，提取额外补充/水果饮品
-    
-    笔记内容：
-    {text}
     """
     
     title = note_data.get("display_title", "")
@@ -135,19 +137,27 @@ def extract_recipe_with_gemini(note_data):
         return None
         
     try:
-        # 🌟 使用新版 SDK 和 2.0 模型进行生成
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt.format(text=text_content)
+        # 🌟 调用智谱 GLM 接口
+        response = client.chat.completions.create(
+            model="glm-4-flash",  # 推荐使用 flash 模型处理结构化提取，速度快
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text_content}
+            ],
+            temperature=0.1 # 调低温度值，保证 JSON 格式更稳定
         )
-        result_str = response.text.strip().removeprefix("```json").removesuffix("```")
+        
+        result_str = response.choices[0].message.content.strip()
+        # 清理可能带有的 markdown 标记
+        result_str = result_str.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         return json.loads(result_str)
+        
     except Exception as e:
-        print(f"Gemini 提取失败/格式错误: {e}")
+        print(f"GLM 提取失败/格式错误: {e}")
         return None
 
 def main():
-    print("🚀 开始执行减脂餐更新流水线...")
+    print("🚀 开始执行减脂餐更新流水线 (GLM 引擎版)...")
     
     if os.path.exists(MENU_FILE) and os.path.getsize(MENU_FILE) > 0:
         with open(MENU_FILE, "r", encoding="utf-8") as f:
@@ -162,7 +172,7 @@ def main():
         recent_notes = fetch_xhs_notes_with_spider(blogger_id)
         
         for note in recent_notes:
-            recipe_json = extract_recipe_with_gemini(note)
+            recipe_json = extract_recipe_with_glm(note)
             
             if recipe_json:
                 all_new_dishes = recipe_json.get("dish_1", []) + recipe_json.get("dish_2", [])
