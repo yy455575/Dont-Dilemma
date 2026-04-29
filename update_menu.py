@@ -4,16 +4,15 @@ import sys
 import time
 import requests
 import inspect
-import google.generativeai as genai
+from google import genai  # 🌟 换成全新一代的 SDK
 
-# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 XHS_COOKIE = os.environ.get("XHS_COOKIE") 
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') 
+# 🌟 初始化全新客户端
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 TARGET_BLOGGERS = [
     "69a5292900000000210079b7",
@@ -23,7 +22,6 @@ TARGET_BLOGGERS = [
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
-    """4字查重算法"""
     clean_new = new_name.replace("减脂", "").replace("版", "")
     for old_name in existing_names:
         clean_old = old_name.replace("减脂", "").replace("版", "")
@@ -37,23 +35,17 @@ def is_duplicate_name(new_name, existing_names):
     return False
 
 def fetch_xhs_notes_with_spider(blogger_id):
-    """
-    使用最新版 cv-cat/Spider_XHS 引擎获取数据
-    """
     if not XHS_COOKIE:
         print("❌ 未检测到 XHS_COOKIE 环境变量，退出抓取。")
         return []
         
     print(f"🕸️ 启动 Spider_XHS 引擎，正在分析博主 {blogger_id} 的主页...")
     
-    # 🌟 核心修复区：记录当前根目录，并将工作环境强制切换进 Spider_XHS 内部
-    # 这样 Node.js 就能完美找到它的内部 js 文件了
     original_cwd = os.getcwd()
     spider_path = os.path.join(original_cwd, "Spider_XHS")
     
     try:
         os.chdir(spider_path)
-        
         from apis.xhs_pc_apis import XHS_Apis
         pc_api = XHS_Apis()
 
@@ -114,12 +106,15 @@ def fetch_xhs_notes_with_spider(blogger_id):
         print(f"Spider_XHS 引擎运行异常: {e}")
         return []
     finally:
-        # 🌟 必须执行的安全退回：抓完数据后，退回到项目的根目录，确保写入 menu_data.json 路径正确
         os.chdir(original_cwd)
 
 def extract_recipe_with_gemini(note_data):
     prompt = """
     你是一个专业的营养师。请分析这篇小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出，不要输出任何多余的解释文字。
+
+    【核心备餐要求】
+    1. 份量与搭配需能同时满足：一份男士晚餐 + 一份女士晚餐及次日午餐。
+    2. 绝对不能包含“苦瓜”！如果原笔记中有苦瓜，请替换为其他蔬菜或直接剔除。
     
     需要的 JSON 字段：
     - tag: 菜系或风格（如"中式家常"）
@@ -140,7 +135,11 @@ def extract_recipe_with_gemini(note_data):
         return None
         
     try:
-        response = model.generate_content(prompt.format(text=text_content))
+        # 🌟 使用新版 SDK 和 2.0 模型进行生成
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt.format(text=text_content)
+        )
         result_str = response.text.strip().removeprefix("```json").removesuffix("```")
         return json.loads(result_str)
     except Exception as e:
