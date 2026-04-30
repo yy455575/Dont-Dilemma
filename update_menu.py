@@ -6,7 +6,7 @@ import requests
 import inspect
 from zhipuai import ZhipuAI
 
-# --- 将拉取下来的 Spider_XHS 加入系统路径 ---
+# --- 环境初始化 ---
 sys.path.append(os.path.join(os.getcwd(), "Spider_XHS"))
 
 ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY")
@@ -16,6 +16,7 @@ if not ZHIPU_API_KEY:
     print("⚠️ 警告: 未检测到 ZHIPU_API_KEY 环境变量！")
 client = ZhipuAI(api_key=ZHIPU_API_KEY)
 
+# 目标博主列表
 TARGET_BLOGGERS = [
     "69a5292900000000210079b7",
     "5bf511b0576d7b0001dd4373", 
@@ -24,16 +25,34 @@ TARGET_BLOGGERS = [
 MENU_FILE = "menu_data.json"
 
 def is_duplicate_name(new_name, existing_names):
-    """4字查重算法"""
-    clean_new = new_name.replace("减脂", "").replace("版", "")
+    """
+    优化后的去重算法：
+    1. 剔除常用干扰词
+    2. 只有连续 6 个及以上的字完全相同才视为重复（超过5个字）
+    3. 短菜名采取严格匹配模式
+    """
+    # 预处理：去掉干扰词并转为纯净字符
+    noise_words = ["减脂", "版", "做法", "教程", "自制", "低脂", "低卡"]
+    clean_new = new_name
+    for word in noise_words:
+        clean_new = clean_new.replace(word, "")
+    clean_new = clean_new.strip()
+
     for old_name in existing_names:
-        clean_old = old_name.replace("减脂", "").replace("版", "")
-        if len(clean_new) < 4:
-            if clean_new in clean_old or clean_old in clean_new:
+        clean_old = old_name
+        for word in noise_words:
+            clean_old = clean_old.replace(word, "")
+        clean_old = clean_old.strip()
+
+        # 场景 A：新菜名很短（不足6字），只有完全一样才算重复
+        if len(clean_new) < 6:
+            if clean_new == clean_old:
                 return True
+        # 场景 B：新菜名较长，检查是否有连续 6 个字的重合
         else:
-            for i in range(len(clean_new) - 3):
-                if clean_new[i:i+4] in clean_old:
+            for i in range(len(clean_new) - 5):
+                overlap_segment = clean_new[i:i+6]
+                if overlap_segment in clean_old:
                     return True
     return False
 
@@ -61,8 +80,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 break
                 
         if not method_to_call:
-            available_methods = [m for m in dir(pc_api) if callable(getattr(pc_api, m)) and not m.startswith('_')]
-            print(f"⚠️ 找不到目标抓取方法！当前 XHS_Apis 支持的方法有：\n{available_methods}")
             return []
 
         sig = inspect.signature(method_to_call)
@@ -80,7 +97,6 @@ def fetch_xhs_notes_with_spider(blogger_id):
                 else:
                     success, msg, data = method_to_call(blogger_id, XHS_COOKIE)
             except Exception as e:
-                print(f"⚠️ 翻页传参异常: {e}")
                 break
 
             if success:
@@ -92,41 +108,36 @@ def fetch_xhs_notes_with_spider(blogger_id):
                     has_more = data.get("has_more", False)
                     current_cursor = data.get("cursor", "")
                     if not has_more or not current_cursor:
-                        print("   -> 博主内容已到底，停止翻页。")
                         break
                 else:
                     break 
 
                 time.sleep(5) 
             else:
-                print(f"❌ 接口请求失败 (大概率是 Cookie 失效或 IP 风控): {msg}")
                 break
         
-        print(f"🎉 翻页结束！共计提取该博主 {len(all_notes)} 篇近期笔记准备送交 AI 分析...")
         return all_notes
             
-    except Exception as e:
-        print(f"Spider_XHS 引擎运行异常: {e}")
+    except Exception:
         return []
     finally:
         os.chdir(original_cwd)
 
 def extract_recipe_with_glm(note_data):
-    """使用智谱 GLM 模型提取图文数据"""
     system_prompt = """
-    你是一个专业的营养师。请分析小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出，不要输出任何多余的解释文字。
+    你是一个专业的营养师。请分析小红书减脂餐笔记内容，提取出符合以下 4 个类别的食材组合，并严格以 JSON 格式输出。
 
     【核心备餐要求】
-    1. 份量与搭配需能同时满足：一份男士晚餐 + 一份女士晚餐及次日午餐。
-    2. 绝对不能包含“苦瓜”！如果原笔记中有苦瓜，请替换为其他蔬菜或直接剔除。
+    1. 份量需满足：一份男士晚餐 + 一份女士晚餐及次日午餐。
+    2. 绝对禁止使用“苦瓜”！
     
-    需要的单体 JSON 对象格式如下（请不要在外面套数组中括号）：
+    格式：
     {
-      "tag": "菜系或风格（如中式家常）",
-      "carbs": ["优质碳水1", "优质碳水2"],
-      "dish_1": ["主菜1", "高蛋白肉类2"],
-      "dish_2": ["副菜1", "蔬菜类2"],
-      "dish_3": ["额外补充1", "水果饮品2"]
+      "tag": "菜系风格",
+      "carbs": ["优质碳水1", "2"],
+      "dish_1": ["蛋白质1", "2"],
+      "dish_2": ["蔬菜1", "2"],
+      "dish_3": ["补充1", "2"]
     }
     """
     
@@ -149,25 +160,16 @@ def extract_recipe_with_glm(note_data):
         
         result_str = response.choices[0].message.content.strip()
         result_str = result_str.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        
         parsed_data = json.loads(result_str)
         
-        # 🌟 终极防弹衣：如果 GLM 还是套了中括号，我们自动帮它脱掉
         if isinstance(parsed_data, list) and len(parsed_data) > 0:
             parsed_data = parsed_data[0]
-            
-        if isinstance(parsed_data, dict):
-            return parsed_data
-        else:
-            print("⚠️ GLM 返回了无法解析的结构")
-            return None
-            
-    except Exception as e:
-        print(f"GLM 提取失败/格式错误: {e}")
+        return parsed_data if isinstance(parsed_data, dict) else None
+    except Exception:
         return None
 
 def main():
-    print("🚀 开始执行减脂餐更新流水线 (GLM 引擎版)...")
+    print("🚀 启动数据更新任务（放宽去重阈值版）...")
     
     if os.path.exists(MENU_FILE) and os.path.getsize(MENU_FILE) > 0:
         with open(MENU_FILE, "r", encoding="utf-8") as f:
@@ -175,7 +177,11 @@ def main():
     else:
         menu_data = []
 
-    existing_dishes = [dish for day in menu_data for dish in day.get("dish_1", []) + day.get("dish_2", [])]
+    # 汇总库中已有的所有菜名
+    existing_dishes = []
+    for day in menu_data:
+        existing_dishes.extend(day.get("dish_1", []) + day.get("dish_2", []))
+
     new_recipes_added = 0
 
     for blogger_id in TARGET_BLOGGERS:
@@ -184,28 +190,28 @@ def main():
         for note in recent_notes:
             recipe_json = extract_recipe_with_glm(note)
             
-            # 🌟 增加最后一道保险：确保 recipe_json 绝对是个字典
             if recipe_json and isinstance(recipe_json, dict):
-                all_new_dishes = recipe_json.get("dish_1", []) + recipe_json.get("dish_2", [])
-                is_duplicate = any(is_duplicate_name(dish, existing_dishes) for dish in all_new_dishes)
+                # 提取新笔记中的核心菜名进行比对
+                new_dishes = recipe_json.get("dish_1", []) + recipe_json.get("dish_2", [])
+                
+                # 只有当新菜谱中的所有主菜都不是重复的，才录入
+                is_duplicate = any(is_duplicate_name(d, existing_dishes) for d in new_dishes)
                 
                 if not is_duplicate:
                     recipe_json["day"] = len(menu_data) + 1
                     menu_data.append(recipe_json)
-                    existing_dishes.extend(all_new_dishes)
+                    existing_dishes.extend(new_dishes)
                     new_recipes_added += 1
-                    print(f"✅ 成功录入新菜谱：{recipe_json.get('tag')}")
+                    print(f"✅ 成功录入：{recipe_json.get('tag')} - {new_dishes[0] if new_dishes else ''}")
                 else:
-                    print(f"❌ 触发去重机制，跳过内容: {note.get('display_title', '未命名')}")
-            else:
-                print(f"⚠️ 解析跳过: 该篇笔记未能成功提取出合规 JSON")
+                    print(f"❌ 相似度过高（超过5字重复），跳过: {note.get('display_title', '未命名')}")
 
     if new_recipes_added > 0:
         with open(MENU_FILE, "w", encoding="utf-8") as f:
             json.dump(menu_data, f, ensure_ascii=False, indent=4)
-        print(f"🎉 任务完成！成功利用 Spider_XHS 追加 {new_recipes_added} 个新食谱。")
+        print(f"🎉 任务完成！共追加 {new_recipes_added} 个新食谱。")
     else:
-        print("🤷 本周暂无符合条件的新食谱更新。")
+        print("🤷 库中已涵盖本次抓取的所有菜色。")
 
 if __name__ == "__main__":
     main()
