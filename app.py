@@ -118,10 +118,10 @@ with st.expander(f"📊 查看当前数据库完整菜单预览 (共 {total_days
         display_list.append({
             "第X天": m.get('day', '-'),
             "风格": m.get('tag', '-'),
-            "碳水 (A/B)": f"{m.get('carbs', ['-','-'])[0]} / {m.get('carbs', ['-','-'])[1]}",
-            "主菜 (A/B)": f"{m.get('dish_1', ['-','-'])[0]} / {m.get('dish_1', ['-','-'])[1]}",
-            "副菜 (A/B)": f"{m.get('dish_2', ['-','-'])[0]} / {m.get('dish_2', ['-','-'])[1]}",
-            "补充 (A/B)": f"{m.get('dish_3', ['-','-'])[0]} / {m.get('dish_3', ['-','-'])[1]}"
+            "碳水 (A/B)": " / ".join(m.get('carbs', [])) or "-",
+            "主菜 (A/B)": " / ".join(m.get('dish_1', [])) or "-",
+            "副菜 (A/B)": " / ".join(m.get('dish_2', [])) or "-",
+            "补充 (A/B)": " / ".join(m.get('dish_3', [])) or "-"
         })
     st.dataframe(pd.DataFrame(display_list), use_container_width=True)
 
